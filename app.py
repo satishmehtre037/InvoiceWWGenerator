@@ -16,18 +16,44 @@ import os
 import sys
 import socket
 import csv
+import threading
+import time
+import urllib.request
 from datetime import datetime
 from flask import Flask, render_template_string, request, jsonify, send_from_directory
 
 from generate_invoice import (
     create_invoice,
     get_next_invoice_number,
+    delete_invoice_record,
     PRESETS,
     OUTPUT_DIR,
     HISTORY_FILE
 )
 
 app = Flask(__name__)
+
+def keep_awake_worker():
+    """Background worker to automatically ping Render web service every 10 minutes to stay awake 24/7."""
+    time.sleep(20)
+    app_url = os.environ.get("RENDER_EXTERNAL_URL") or os.environ.get("KEEP_AWAKE_URL")
+    if not app_url:
+        return
+
+    ping_url = f"{app_url.rstrip('/')}/ping"
+    print(f"[+] Keep-awake worker started. Pinging {ping_url} every 10 minutes.")
+
+    while True:
+        try:
+            req = urllib.request.Request(ping_url, headers={'User-Agent': 'RenderKeepAwake/1.0'})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                pass
+        except Exception:
+            pass
+        time.sleep(600)
+
+# Start background keep-awake thread
+threading.Thread(target=keep_awake_worker, daemon=True).start()
 
 def get_local_ip():
     """Finds the local network IP for phone access."""
@@ -340,6 +366,24 @@ HTML_TEMPLATE = """
             font-size: 0.85rem;
         }
 
+        .btn-delete-demo {
+            background: rgba(248, 81, 73, 0.12);
+            border: 1px solid rgba(248, 81, 73, 0.35);
+            color: #f85149;
+            grid-column: span 2;
+            padding: 10px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            border-radius: 10px;
+            transition: all 0.2s ease;
+            font-weight: 600;
+        }
+
+        .btn-delete-demo:hover, .btn-delete-demo:active {
+            background: rgba(248, 81, 73, 0.25);
+            transform: scale(0.98);
+        }
+
         /* History Table */
         .history-list {
             display: flex;
@@ -382,6 +426,22 @@ HTML_TEMPLATE = """
             font-size: 0.78rem;
             text-decoration: none;
             font-weight: 600;
+            border: none;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .hist-del-btn {
+            background: rgba(248, 81, 73, 0.15) !important;
+            color: #f85149 !important;
+            border: 1px solid rgba(248, 81, 73, 0.3) !important;
+        }
+
+        .hist-del-btn:hover, .hist-del-btn:active {
+            background: rgba(248, 81, 73, 0.35) !important;
+            transform: scale(0.95);
         }
 
         .toast {
@@ -520,6 +580,9 @@ HTML_TEMPLATE = """
             <button type="button" class="action-btn btn-copy" onclick="copyWhatsAppTemplate()">
                 📋 Copy WhatsApp Message Template
             </button>
+            <button type="button" class="btn-delete-demo" onclick="deleteCurrentInvoice()">
+                🗑️ Delete this Demo / Test Invoice
+            </button>
         </div>
     </div>
 
@@ -536,6 +599,7 @@ HTML_TEMPLATE = """
                 <div class="hist-actions">
                     <a href="/download/{{ item.png_name }}" target="_blank" class="hist-icon-btn">PNG</a>
                     <a href="/download/{{ item.pdf_name }}" target="_blank" class="hist-icon-btn">PDF</a>
+                    <button type="button" onclick="deleteInvoice('{{ item.inv_no }}', '{{ item.name }}')" class="hist-icon-btn hist-del-btn" title="Delete Invoice">🗑️</button>
                 </div>
             </div>
             {% endfor %}
@@ -634,11 +698,49 @@ function showToast(msg) {
     setTimeout(() => t.classList.remove('show'), 3000);
 }
 
+async function deleteCurrentInvoice() {
+    if (!lastGeneratedData) return;
+    deleteInvoice(lastGeneratedData.inv_no, lastGeneratedData.name);
+}
+
+async function deleteInvoice(invNo, name) {
+    if (!confirm(`Are you sure you want to delete invoice ${invNo} (${name})?\n\nThis will permanently delete the invoice files and automatically recover the invoice counter if this was the latest invoice.`)) {
+        return;
+    }
+    try {
+        const res = await fetch('/api/delete-invoice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ inv_no: invNo })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(`Invoice ${invNo} deleted!`);
+            if (lastGeneratedData && lastGeneratedData.inv_no === invNo) {
+                document.getElementById('resultCard').style.display = 'none';
+                lastGeneratedData = null;
+            }
+            if (data.next_no) {
+                document.getElementById('invNo').value = data.next_no;
+            }
+            loadHistory();
+        } else {
+            alert('Error: ' + (data.error || 'Failed to delete invoice'));
+        }
+    } catch (e) {
+        alert('Network error deleting invoice: ' + e);
+    }
+}
+
 async function loadHistory() {
     try {
         const res = await fetch('/api/history');
         const data = await res.json();
         const list = document.getElementById('historyList');
+        if (!data.history || data.history.length === 0) {
+            list.innerHTML = '<p style="font-size: 0.85rem; color: #8b949e; text-align: center; padding: 12px;">No invoices generated yet.</p>';
+            return;
+        }
         list.innerHTML = data.history.map(item => `
             <div class="history-item">
                 <div class="hist-info">
@@ -648,6 +750,7 @@ async function loadHistory() {
                 <div class="hist-actions">
                     <a href="/download/${item.png_name}" target="_blank" class="hist-icon-btn">PNG</a>
                     <a href="/download/${item.pdf_name}" target="_blank" class="hist-icon-btn">PDF</a>
+                    <button type="button" onclick="deleteInvoice('${item.inv_no}', '${item.name}')" class="hist-icon-btn hist-del-btn" title="Delete Invoice">🗑️</button>
                 </div>
             </div>
         `).join('');
@@ -699,6 +802,15 @@ def index():
         history=history
     )
 
+@app.route('/ping')
+@app.route('/health')
+def ping():
+    return jsonify({
+        "status": "awake",
+        "service": "Wanderworld Invoice Generator",
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+
 @app.route('/api/next-no')
 def api_next_no():
     return jsonify({"next_no": get_next_invoice_number()})
@@ -706,6 +818,27 @@ def api_next_no():
 @app.route('/api/history')
 def api_history():
     return jsonify({"history": read_history_records()})
+
+@app.route('/api/delete-invoice', methods=['POST'])
+def api_delete_invoice():
+    try:
+        data = request.json or {}
+        inv_no = data.get("inv_no", "").strip()
+        if not inv_no:
+            return jsonify({"success": False, "error": "Invoice number required"}), 400
+
+        success, msg = delete_invoice_record(inv_no)
+        if not success:
+            return jsonify({"success": False, "error": msg}), 404
+
+        next_no = get_next_invoice_number()
+        return jsonify({
+            "success": True,
+            "message": msg,
+            "next_no": next_no
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/generate', methods=['POST'])
 def api_generate():

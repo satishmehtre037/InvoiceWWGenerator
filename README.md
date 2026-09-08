@@ -30,7 +30,8 @@ This system lets you generate official, high-resolution **Wanderworld Holidays**
 
      Attached is your official invoice copy. Welcome aboard! ❄️✨
      ```
-   - 📋 **Copy WhatsApp Message Template:** Copies the formatted text to clipboard so you can paste it into the student's chat with the image.
+    - 📋 **Copy WhatsApp Message Template:** Copies the formatted text to clipboard so you can paste it into the student's chat with the image.
+    - 🗑️ **Delete Demo / Test Invoices:** If you generated a test or checking invoice, tap **`🗑️ Delete this Demo / Test Invoice`** (or the trash icon in Recent Invoices). This automatically deletes the files and restores the invoice number counter (e.g. rolls back from `INV-0156-C` to `INV-0156-B`) so no numbers are wasted!
 
 ---
 
@@ -43,7 +44,7 @@ To run this 24/7 on your phone without needing your laptop turned on:
    - Click **New +** -> **Web Service**.
    - Select your repository: **`satishmehtre037/InvoiceWWGenerator`**.
    - Settings:
-     - **Name:** `invoicewwgenerator` (or your choice)
+     - **Name:** `invoicewwgenerator`
      - **Runtime:** `Python 3`
      - **Build Command:** `pip install -r requirements.txt`
      - **Start Command:** `gunicorn app:app`
@@ -51,6 +52,26 @@ To run this 24/7 on your phone without needing your laptop turned on:
 2. **Access Anywhere:**
    - Render gives you a free HTTPS link like `https://invoicewwgenerator.onrender.com`.
    - Open this URL on your phone's browser, bookmark it or add it to your Home Screen as an App! Now you can generate invoices anywhere, anytime on the go.
+
+---
+
+## ⏰ How to Keep Render Awake 24/7 (Never Sleeps / Instant Loading):
+
+Render free tier goes to sleep after 15 minutes of inactivity. To keep your app **awake 24/7 with zero waiting time**:
+
+### Method 1: Free Uptime Monitor (Recommended — Takes 1 min)
+1. Go to **[cron-job.org](https://cron-job.org)** or **[uptimerobot.com](https://uptimerobot.com)** (both 100% free).
+2. Create a free account and click **Create Cronjob** / **Add Monitor**.
+3. Set URL to your Render ping URL:
+   `https://<your-render-app-name>.onrender.com/ping`
+4. Set schedule / interval to **every 10 minutes** (or 14 minutes).
+5. Done! Because it receives a ping every 10 minutes, Render will **NEVER sleep** and will always load instantly on your phone!
+
+### Method 2: Automatic Built-in Self-Ping
+- In your Render Dashboard ➔ Environment Variables, add:
+  - Key: `KEEP_AWAKE_URL`
+  - Value: `https://<your-render-app-name>.onrender.com`
+- The app has a built-in background worker that will automatically ping itself every 10 minutes.
 
 ---
 

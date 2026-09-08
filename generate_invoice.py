@@ -137,6 +137,77 @@ def save_last_invoice_number(inv_no):
     except Exception as e:
         print(f"[-] Warning: Could not update tracker file: {e}")
 
+def delete_invoice_record(target_inv_no):
+    """
+    Deletes an invoice from history CSV, deletes its PDF & PNG files,
+    and safely rolls back tracker if it was the last generated invoice.
+    """
+    if not os.path.exists(HISTORY_FILE):
+        return False, "History file not found"
+
+    try:
+        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+            reader = list(csv.reader(f))
+        if not reader:
+            return False, "History is empty"
+
+        headers = reader[0]
+        data_rows = reader[1:]
+
+        deleted_row = None
+        remaining_rows = []
+        for r in data_rows:
+            if len(r) > 1 and r[1].strip() == target_inv_no.strip():
+                deleted_row = r
+            else:
+                remaining_rows.append(r)
+
+        if not deleted_row:
+            return False, f"Invoice {target_inv_no} not found"
+
+        # Delete PDF & PNG files
+        pdf_path = deleted_row[8] if len(deleted_row) > 8 else None
+        png_path = deleted_row[9] if len(deleted_row) > 9 else None
+
+        for p in [pdf_path, png_path]:
+            if p and os.path.exists(p):
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass
+            if p:
+                base_f = os.path.basename(p)
+                out_f = os.path.join(OUTPUT_DIR, base_f)
+                if os.path.exists(out_f):
+                    try:
+                        os.remove(out_f)
+                    except Exception:
+                        pass
+
+        # Write updated CSV
+        with open(HISTORY_FILE, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+            writer.writerows(remaining_rows)
+
+        # Roll back tracker if deleted invoice was the last one
+        if os.path.exists(TRACKER_FILE):
+            try:
+                with open(TRACKER_FILE, "r", encoding="utf-8") as f:
+                    last_no = f.read().strip()
+                if last_no == target_inv_no.strip():
+                    if remaining_rows:
+                        prev_inv_no = remaining_rows[-1][1].strip()
+                        save_last_invoice_number(prev_inv_no)
+                    else:
+                        save_last_invoice_number("INV-0156-A")
+            except Exception:
+                pass
+
+        return True, f"Invoice {target_inv_no} deleted successfully"
+    except Exception as e:
+        return False, f"Failed to delete invoice: {str(e)}"
+
 def format_inr(val, add_slash=True):
     """Formats number as Indian Currency string."""
     suffix = "/-" if add_slash else ""
