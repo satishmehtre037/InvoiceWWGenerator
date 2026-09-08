@@ -170,17 +170,17 @@ def delete_invoice_record(target_inv_no):
         png_path = deleted_row[9] if len(deleted_row) > 9 else None
 
         for p in [pdf_path, png_path]:
-            if p and os.path.exists(p):
-                try:
-                    os.remove(p)
-                except Exception:
-                    pass
             if p:
-                base_f = os.path.basename(p)
-                out_f = os.path.join(OUTPUT_DIR, base_f)
+                clean_f = re.split(r'[\\/]', p.strip())[-1]
+                out_f = os.path.join(OUTPUT_DIR, clean_f)
                 if os.path.exists(out_f):
                     try:
                         os.remove(out_f)
+                    except Exception:
+                        pass
+                if os.path.exists(p):
+                    try:
+                        os.remove(p)
                     except Exception:
                         pass
 
@@ -366,7 +366,7 @@ def create_invoice(
             timestamp_log,
             invoice_no, date_display, customer_name,
             description, payment_stage, f"{total_amount:,.2f}", bal_str,
-            pdf_path, png_path
+            f"{file_stem}.pdf", f"{file_stem}.png"
         ])
 
     print(f"[OK] Invoice successfully generated:")

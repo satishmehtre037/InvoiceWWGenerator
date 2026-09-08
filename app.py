@@ -16,6 +16,7 @@ import os
 import sys
 import socket
 import csv
+import re
 import threading
 import time
 import urllib.request
@@ -762,6 +763,11 @@ async function loadHistory() {
 </html>
 """
 
+def extract_filename(val):
+    if not val:
+        return ""
+    return re.split(r'[\\/]', str(val).strip())[-1]
+
 def read_history_records():
     """Reads history from CSV."""
     records = []
@@ -781,8 +787,8 @@ def read_history_records():
                                 "stage": r[5],
                                 "amount": r[6],
                                 "balance": r[7],
-                                "pdf_name": os.path.basename(r[8]),
-                                "png_name": os.path.basename(r[9])
+                                "pdf_name": extract_filename(r[8]),
+                                "png_name": extract_filename(r[9])
                             })
         except Exception:
             pass
@@ -886,7 +892,8 @@ def api_generate():
 
 @app.route('/download/<path:filename>')
 def download_file(filename):
-    return send_from_directory(OUTPUT_DIR, filename, as_attachment=False)
+    clean_filename = extract_filename(filename)
+    return send_from_directory(OUTPUT_DIR, clean_filename, as_attachment=False)
 
 def print_banner(port=5000):
     local_ip = get_local_ip()
