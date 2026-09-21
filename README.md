@@ -35,9 +35,31 @@ This system lets you generate official, high-resolution **Wanderworld Holidays**
 
 ---
 
-## 🌐 24/7 Cloud Deployment (Use Anywhere, Anytime from Phone):
+---
 
-To run this 24/7 on your phone without needing your laptop turned on:
+## ⚡ Deploy to Vercel (100% Free Forever — Serverless, Never Sleeps & Never Suspended):
+
+Vercel is serverless, completely free, and doesn't have Render's 750-hour monthly limit:
+
+1. **Deploy in 1 Click on Vercel:**
+   - Go to [vercel.com](https://vercel.com) and click **"Log In"** ➔ **"Continue with GitHub"**.
+   - Click **"Add New..."** ➔ **"Project"**.
+   - Select your repository: **`InvoiceWWGenerator`** (or `satishmehtre037/InvoiceWWGenerator`) and click **Import**.
+   - Leave all default settings (Vercel automatically detects `vercel.json` and Python).
+   - Click **Deploy**!
+2. **Access Anywhere on Phone:**
+   - Vercel will give you a permanent URL like:
+     ```
+     https://invoice-ww-generator.vercel.app
+     ```
+   - All 8 previous receipts are pre-bundled and immediately available in the Recent Invoices log with 1-tap PDF & PNG download!
+   - Open on your phone browser ➔ Tap **"Add to Home screen"** to use like an app!
+
+---
+
+## 🌐 Alternative: Deploy to Render (Web Service):
+
+To run on Render:
 
 1. **Deploy to Render (Free):**
    - Go to [render.com](https://render.com) and Sign In with GitHub.

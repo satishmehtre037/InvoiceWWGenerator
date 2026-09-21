@@ -27,6 +27,8 @@ from generate_invoice import (
     create_invoice,
     get_next_invoice_number,
     delete_invoice_record,
+    get_writable_dir,
+    get_active_history_file,
     PRESETS,
     OUTPUT_DIR,
     HISTORY_FILE
@@ -771,9 +773,10 @@ def extract_filename(val):
 def read_history_records():
     """Reads history from CSV."""
     records = []
-    if os.path.exists(HISTORY_FILE):
+    hist_file = get_active_history_file(for_writing=False)
+    if os.path.exists(hist_file):
         try:
-            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+            with open(hist_file, "r", encoding="utf-8") as f:
                 reader = csv.reader(f)
                 rows = list(reader)
                 if len(rows) > 1:
@@ -792,7 +795,7 @@ def read_history_records():
                             })
         except Exception:
             pass
-    return records[:15]
+    return records[:25]
 
 @app.route('/')
 def index():
@@ -893,6 +896,11 @@ def api_generate():
 @app.route('/download/<path:filename>')
 def download_file(filename):
     clean_filename = extract_filename(filename)
+    if os.path.exists(os.path.join(OUTPUT_DIR, clean_filename)):
+        return send_from_directory(OUTPUT_DIR, clean_filename, as_attachment=False)
+    writable_dir = get_writable_dir()
+    if os.path.exists(os.path.join(writable_dir, clean_filename)):
+        return send_from_directory(writable_dir, clean_filename, as_attachment=False)
     return send_from_directory(OUTPUT_DIR, clean_filename, as_attachment=False)
 
 def print_banner(port=5000):

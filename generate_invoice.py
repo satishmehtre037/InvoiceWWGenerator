@@ -27,6 +27,60 @@ TRACKER_FILE = os.path.join(BASE_DIR, "last_invoice_number.txt")
 HISTORY_FILE = os.path.join(BASE_DIR, "invoice_history.csv")
 OUTPUT_DIR = os.path.join(BASE_DIR, "Generated_Invoices")
 
+TMP_DIR = "/tmp" if os.name != 'nt' else os.path.join(BASE_DIR, ".tmp")
+
+def get_writable_dir():
+    """Returns a writable directory for invoice output (OUTPUT_DIR or /tmp)."""
+    try:
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        test_file = os.path.join(OUTPUT_DIR, ".test_write")
+        with open(test_file, "w") as f:
+            f.write("1")
+        os.remove(test_file)
+        return OUTPUT_DIR
+    except Exception:
+        tmp_target = os.path.join(TMP_DIR, "Generated_Invoices")
+        os.makedirs(tmp_target, exist_ok=True)
+        return tmp_target
+
+def get_active_tracker_file(for_writing=False):
+    tmp_tracker = os.path.join(TMP_DIR, "last_invoice_number.txt")
+    if not for_writing:
+        if os.path.exists(tmp_tracker):
+            return tmp_tracker
+        return TRACKER_FILE
+    try:
+        test_file = TRACKER_FILE + ".test"
+        with open(test_file, "w") as f:
+            f.write("1")
+        os.remove(test_file)
+        return TRACKER_FILE
+    except Exception:
+        os.makedirs(TMP_DIR, exist_ok=True)
+        return tmp_tracker
+
+def get_active_history_file(for_writing=False):
+    tmp_history = os.path.join(TMP_DIR, "invoice_history.csv")
+    if not for_writing:
+        if os.path.exists(tmp_history):
+            return tmp_history
+        return HISTORY_FILE
+    try:
+        test_file = HISTORY_FILE + ".test"
+        with open(test_file, "w") as f:
+            f.write("1")
+        os.remove(test_file)
+        return HISTORY_FILE
+    except Exception:
+        os.makedirs(TMP_DIR, exist_ok=True)
+        if not os.path.exists(tmp_history) and os.path.exists(HISTORY_FILE):
+            try:
+                import shutil
+                shutil.copyfile(HISTORY_FILE, tmp_history)
+            except Exception:
+                pass
+        return tmp_history
+
 # Presets matching student payment stages for Himachal Winter Trip 2027
 PRESETS = {
     1: {
@@ -114,10 +168,11 @@ def get_next_invoice_number():
     Returns next invoice number keeping the base (e.g. INV-0156-) 
     and incrementing the letter suffix (e.g. INV-0156-A -> INV-0156-B -> INV-0156-C).
     """
-    if not os.path.exists(TRACKER_FILE):
-        return "INV-0156-B"
+    tracker_path = get_active_tracker_file(for_writing=False)
+    if not os.path.exists(tracker_path):
+        return "INV-0156-H"
     try:
-        with open(TRACKER_FILE, "r", encoding="utf-8") as f:
+        with open(tracker_path, "r", encoding="utf-8") as f:
             last_no = f.read().strip()
             
         m = re.search(r"^(.*?-\s*)([A-Za-z]+)$", last_no)
@@ -125,14 +180,15 @@ def get_next_invoice_number():
             prefix = m.group(1)
             suffix = m.group(2)
             return f"{prefix}{increment_letter_suffix(suffix)}"
-        return "INV-0156-B"
+        return "INV-0156-H"
     except Exception:
-        return "INV-0156-B"
+        return "INV-0156-H"
 
 def save_last_invoice_number(inv_no):
     """Updates invoice tracker file."""
     try:
-        with open(TRACKER_FILE, "w", encoding="utf-8") as f:
+        tracker_path = get_active_tracker_file(for_writing=True)
+        with open(tracker_path, "w", encoding="utf-8") as f:
             f.write(inv_no)
     except Exception as e:
         print(f"[-] Warning: Could not update tracker file: {e}")
@@ -142,11 +198,12 @@ def delete_invoice_record(target_inv_no):
     Deletes an invoice from history CSV, deletes its PDF & PNG files,
     and safely rolls back tracker if it was the last generated invoice.
     """
-    if not os.path.exists(HISTORY_FILE):
+    hist_file = get_active_history_file(for_writing=True)
+    if not os.path.exists(hist_file):
         return False, "History file not found"
 
     try:
-        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+        with open(hist_file, "r", encoding="utf-8") as f:
             reader = list(csv.reader(f))
         if not reader:
             return False, "History is empty"
@@ -338,8 +395,9 @@ def create_invoice(
     clean_inv = re.sub(r'[^a-zA-Z0-9_-]', '_', invoice_no.strip()).strip('_')
     file_stem = f"{clean_inv}_{clean_name}"
     
-    pdf_path = os.path.join(OUTPUT_DIR, f"{file_stem}.pdf")
-    png_path = os.path.join(OUTPUT_DIR, f"{file_stem}.png")
+    out_dir = get_writable_dir()
+    pdf_path = os.path.join(out_dir, f"{file_stem}.pdf")
+    png_path = os.path.join(out_dir, f"{file_stem}.png")
 
     # Save PNG (lossless 95% quality, ready for WhatsApp)
     img.save(png_path, quality=95)
@@ -352,8 +410,9 @@ def create_invoice(
         save_last_invoice_number(invoice_no)
 
     # Log to history CSV (clean columns without CGST/SGST)
-    file_exists = os.path.exists(HISTORY_FILE) and os.path.getsize(HISTORY_FILE) > 0
-    with open(HISTORY_FILE, "a", newline="", encoding="utf-8") as f:
+    hist_file = get_active_history_file(for_writing=True)
+    file_exists = os.path.exists(hist_file) and os.path.getsize(hist_file) > 0
+    with open(hist_file, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         if not file_exists:
             writer.writerow([
